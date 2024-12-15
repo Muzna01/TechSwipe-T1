@@ -81,14 +81,13 @@ const sections = [
   Bottom
 ]
 
-
-
 export default function Page() {
-
   const [currentSection, setCurrentSection] = useState(0);
-  const [scrollLock, setScrollLock] = useState(false); // Control scroll lock
-  const [contentIndex, setContentIndex] = useState(0); // Track content inside section 5
+  const [scrollLock, setScrollLock] = useState(false);
+  const [contentIndex, setContentIndex] = useState(0);
   const sectionRefs = useRef<HTMLDivElement[]>([]);
+  const accumulatedDeltaY = useRef<number>(0);
+  const scrollTimeout = useRef<boolean>(false);
 
   const scrollToSection = (index: number) => {
     const targetSection = sectionRefs.current[index];
@@ -98,43 +97,46 @@ export default function Page() {
   };
 
   const handleScroll = (event: WheelEvent) => {
+    // Accumulate deltaY values
+    accumulatedDeltaY.current += event.deltaY;
+
     if (scrollLock) {
       event.preventDefault();
       return;
     }
 
-    if (event.deltaY > 0 && currentSection < sections.length - 1) {
-      setCurrentSection((prev) => prev + 1);
-    } else if (event.deltaY < 0 && currentSection > 0) {
-      setCurrentSection((prev) => prev - 1);
+    if (!scrollTimeout.current) {
+      scrollTimeout.current = true;
+      setTimeout(() => {
+        const threshold = 50; // Sensitivity for scrollpad adjustments
+        if (accumulatedDeltaY.current > threshold && currentSection < sections.length - 1) {
+          setCurrentSection((prev) => prev + 1);
+        } else if (accumulatedDeltaY.current < -threshold && currentSection > 0) {
+          setCurrentSection((prev) => prev - 1);
+        }
+        accumulatedDeltaY.current = 0;
+        scrollTimeout.current = false;
+      }, 100); // Adjust for responsiveness
     }
   };
 
-
-
-  // Company Structure Content Logic
   const handleCompanyStructureScroll = (event: WheelEvent) => {
-    if (currentSection === 2) {  // Check if we're in the CompanyStructure section
-      // Lock scroll inside CompanyStructure on scroll down to move other section
-      if(contentIndex === 0 && event.deltaY > 0) {
+    if (currentSection === 2) {
+      event.preventDefault();
+
+      if (contentIndex === 0 && event.deltaY > 0) {
         setScrollLock(true);
-        event.preventDefault(); // Prevent default scroll behavior inside CompanyStructure
-      }
-      // Unlock scroll inside CompanyStructure on scroll up to move previous section
-      if(contentIndex === 0 && event.deltaY < 0) {
+      } else if (contentIndex === 0 && event.deltaY < 0) {
         setScrollLock(false);
-        }
-      
-      // Handle scrolling through content in CompanyStructure
+      }
+
       if (event.deltaY > 0 && contentIndex < headings.length - 1) {
         setContentIndex((prevIndex) => prevIndex + 1);
       } else if (event.deltaY < 0 && contentIndex > 0) {
         setContentIndex((prevIndex) => prevIndex - 1);
-      } 
-      // if all content display scroll down unlock and allow to move next section
-      else if (event.deltaY > 0 && contentIndex === headings.length - 1) {
-        setScrollLock(false);  // Unlock scroll after reaching the last content item
-        setCurrentSection((prev) => prev + 1); // Move to the next section
+      } else if (event.deltaY > 0 && contentIndex === headings.length - 1) {
+        setScrollLock(false);
+        setCurrentSection((prev) => prev + 1);
       }
     }
   };
@@ -143,18 +145,14 @@ export default function Page() {
     scrollToSection(currentSection);
   }, [currentSection]);
 
-
   useEffect(() => {
     if (currentSection === 2) {
       setScrollLock(true);
       window.addEventListener('wheel', handleCompanyStructureScroll, { passive: false });
-    } else if (currentSection === 1) {
-      setScrollLock(false); // Unlock scroll when reaching section 1
     } else {
-      setScrollLock(false); // Disable scroll lock for other sections
+      setScrollLock(false);
       window.removeEventListener('wheel', handleCompanyStructureScroll);
     }
-
     return () => window.removeEventListener('wheel', handleCompanyStructureScroll);
   }, [currentSection, contentIndex]);
 
@@ -162,6 +160,9 @@ export default function Page() {
     window.addEventListener('wheel', handleScroll, { passive: false });
     return () => window.removeEventListener('wheel', handleScroll);
   }, [scrollLock, currentSection]);
+
+
+
 
   return (
     <main className="grid grid-cols-1">
